@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menú de Juegos - Ejercicios Mentales</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px;
+            background-color: #f0f8ff;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .menu {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 80%;
+            max-width: 400px;
+        }
+        .game-link {
+            text-decoration: none;
+            padding: 15px 25px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .game-link:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <h1>🧠 Juegos de Memoria y Lógica</h1>
+    <p>Seleccione el juego que desea iniciar:</p>
+    <div class="menu">
+        <a href="sudoku16x16-2+print.html" class="game-link" style="background-color: #2ecc71;">Sudoku 16x16 (Desafío)</a>
+        <a href="memorama.html" class="game-link" style="background-color: #e67e22;">Memorama (Juego de Pares)</a>
+        <a href="sopadeletras.html" class="game-link" style="background-color: #9b59b6;">Sopa de Letras (Intermedio)</a>
+    </div>
+    <p style="margin-top: 40px; font-size: 0.9em; color: #666;">Diseñado para ejercitar la mente sin publicidad.</p>
+</body>
+</html>
