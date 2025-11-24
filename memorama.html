@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Juego de Memoria</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f0f8ff; /* Azul muy clarito, relajante */
+      margin: 0;
+      padding: 20px;
+      user-select: none; /* Evita que se seleccione el texto al hacer clic */
+    }
+
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+
+    /* Controles de dificultad */
+    .controls {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 1.1rem;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      transition: transform 0.1s, background 0.2s;
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    .btn-easy { background: #2ecc71; } /* Verde */
+    .btn-medium { background: #f39c12; } /* Naranja */
+    .btn-hard { background: #e74c3c; } /* Rojo */
+
+    /* Tablero de juego */
+    .grid {
+      display: grid;
+      gap: 15px;
+      max-width: 600px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Estilos de la carta */
+    .card {
+      aspect-ratio: 1 / 1; /* Siempre cuadrada */
+      background-color: #fff;
+      border-radius: 12px;
+      cursor: pointer;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 3rem; /* Emojis grandes */
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      transition: transform 0.3s ease;
+      transform-style: preserve-3d;
+    }
+
+    /* Efecto al pasar el mouse (opcional) */
+    .card:hover {
+      transform: translateY(-2px);
+    }
+
+    /* Estado: Boca abajo (Tapada) */
+    .card.hidden {
+      background-color: #34495e; /* Azul oscuro elegante */
+      color: transparent; /* Oculta el emoji */
+      background-image: linear-gradient(135deg, #34495e 25%, #2c3e50 25%, #2c3e50 50%, #34495e 50%, #34495e 75%, #2c3e50 75%, #2c3e50 100%);
+      background-size: 20px 20px; /* Patrón trasero */
+    }
+
+    /* Estado: Boca arriba (Destapada) */
+    .card.revealed {
+      background-color: #fff;
+      transform: rotateY(0);
+      cursor: default;
+    }
+    
+    /* Estado: Encontrada (Pareja exitosa) */
+    .card.matched {
+      background-color: #d4efdf; /* Verde muy suave */
+      border: 2px solid #27ae60;
+      animation: pulse 0.5s;
+      cursor: default;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    /* Mensaje de victoria */
+    #message {
+      margin-top: 20px;
+      font-size: 1.5rem;
+      color: #27ae60;
+      font-weight: bold;
+      text-align: center;
+      min-height: 40px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <h1>Ejercitando la Memoria</h1>
+  
+  <div class="controls">
+    <button class="btn btn-easy" onclick="initGame(2, 3)">Muy Fácil (6 cartas)</button>
+    <button class="btn btn-medium" onclick="initGame(3, 4)">Normal (12 cartas)</button>
+    <button class="btn btn-hard" onclick="initGame(4, 4)">Desafío (16 cartas)</button>
+  </div>
+
+  <div id="game-grid" class="grid"></div>
+  
+  <div id="message"></div>
+
+<script>
+  /* Banco de imágenes (Emojis) 
+     Usamos cosas cotidianas y distinguibles
+  */
+  const ALL_EMOJIS = ['🍎', '🍌', '🍇', '🐶', '🐱', '🚗', '⚽', '🏠', '🎩', '🌵', '🍕', '🎸'];
+  
+  let cards = [];
+  let flippedCards = [];
+  let matchesFound = 0;
+  let totalPairs = 0;
+  let isLocked = false; // Bloquea clics mientras se verifican pares
+
+  // Iniciar al cargar la página en modo fácil
+  window.onload = () => initGame(2, 3);
+
+  function initGame(rows, cols) {
+    const grid = document.getElementById('game-grid');
+    const msg = document.getElementById('message');
+    
+    // Limpiar estado anterior
+    grid.innerHTML = '';
+    msg.textContent = '';
+    flippedCards = [];
+    matchesFound = 0;
+    isLocked = false;
+    
+    // Calcular cuántos pares necesitamos
+    const totalCards = rows * cols;
+    totalPairs = totalCards / 2;
+    
+    // Configurar CSS Grid dinámicamente
+    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+    // Seleccionar emojis y duplicarlos para hacer pares
+    // 1. Mezclar banco total de emojis
+    let availableEmojis = [...ALL_EMOJIS].sort(() => 0.5 - Math.random());
+    // 2. Tomar los necesarios
+    let selectedEmojis = availableEmojis.slice(0, totalPairs);
+    // 3. Duplicarlos
+    let gameEmojis = [...selectedEmojis, ...selectedEmojis];
+    // 4. Mezclar las cartas del juego
+    gameEmojis.sort(() => 0.5 - Math.random());
+
+    // Crear cartas en el HTML
+    gameEmojis.forEach((emoji, index) => {
+      const card = document.createElement('div');
+      card.classList.add('card', 'hidden');
+      card.dataset.value = emoji; // Guardamos el emoji en un atributo de datos
+      card.dataset.index = index;
+      card.textContent = emoji; // El emoji está ahí, pero CSS lo oculta cuando tiene clase 'hidden'
+      
+      card.onclick = () => flipCard(card);
+      grid.appendChild(card);
+    });
+  }
+
+  function flipCard(card) {
+    // Validaciones para ignorar clics inválidos
+    if (isLocked) return; // Si estamos esperando (timeout), no hacer nada
+    if (!card.classList.contains('hidden')) return; // Si ya está volteada, ignorar
+
+    // Voltear carta
+    card.classList.remove('hidden');
+    card.classList.add('revealed');
+    flippedCards.push(card);
+
+    // Si es la segunda carta volteada, verificar
+    if (flippedCards.length === 2) {
+      checkForMatch();
+    }
+  }
+
+  function checkForMatch() {
+    isLocked = true; // Bloquear tablero
+    const [card1, card2] = flippedCards;
+
+    const isMatch = card1.dataset.value === card2.dataset.value;
+
+    if (isMatch) {
+      disableCards();
+    } else {
+      unflipCards();
+    }
+  }
+
+  function disableCards() {
+    const [card1, card2] = flippedCards;
+    
+    // Pequeña demora para que vea el color verde
+    setTimeout(() => {
+        card1.classList.remove('revealed');
+        card1.classList.add('matched');
+        card2.classList.remove('revealed');
+        card2.classList.add('matched');
+        
+        matchesFound++;
+        flippedCards = [];
+        isLocked = false;
+
+        // Verificar victoria
+        if (matchesFound === totalPairs) {
+            celebrateWin();
+        }
+    }, 500);
+  }
+
+  function unflipCards() {
+    // Si no son iguales, esperar un poco y volver a tapar
+    setTimeout(() => {
+      const [card1, card2] = flippedCards;
+      card1.classList.remove('revealed');
+      card1.classList.add('hidden');
+      card2.classList.remove('revealed');
+      card2.classList.add('hidden');
+      
+      flippedCards = [];
+      isLocked = false;
+    }, 1200); // 1.2 segundos para que tenga tiempo de memorizar
+  }
+
+  function celebrateWin() {
+    const msg = document.getElementById('message');
+    const phrases = ["¡Muy bien hecho!", "¡Excelente memoria!", "¡Bravo!"];
+    msg.textContent = phrases[Math.floor(Math.random() * phrases.length)];
+  }
+
+</script>
+</body>
+</html>
