@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sudoku Clásico para Imprimir</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            background:#f0f2f5;
+            margin:0;
+            padding:12px;
+            touch-action: manipulation;
+        }
+        h1 { color:#333; margin:8px 0; }
+        #status-bar { margin-bottom:10px; font-weight:600; color:#555; }
+        #sudoku-board {
+            display:grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap:0;
+            border:2px solid #333;
+            background:#333;
+            max-width:460px;
+            width:100%;
+            aspect-ratio:1/1;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+        }
+        .cell {
+            background:white;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:1.6rem;
+            font-weight:700;
+            cursor:pointer;
+            border:1px solid #cbd5e0;
+            user-select:none;
+            position:relative;
+            padding:0;
+        }
+        /* thicker box borders */
+        .cell:nth-child(3n) { border-right:2px solid #333; }
+        .cell:nth-child(9n) { border-right:1px solid #cbd5e0; }
+        /* horizontal (rows 3 and 6) */
+        .cell:nth-child(n+19):nth-child(-n+27) { border-bottom:2px solid #333; }
+        .cell:nth-child(n+46):nth-child(-n+54) { border-bottom:2px solid #333; }
+
+        .cell.fixed { color:#2d3748; background:#edf2f7; cursor:default; }
+        .cell.editable { color:#1e90ff; }
+        .cell.selected { background:#bee3f8 !important; }
+        .cell.error { color:#fff; background:#e53e3e !important; }
+
+        #numpad {
+            display:grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap:8px;
+            margin-top:18px;
+            max-width:460px;
+            width:100%;
+        }
+        .num-btn {
+            padding:14px 0;
+            font-size:1.2rem;
+            background:white;
+            border:1px solid #cbd5e0;
+            border-radius:8px;
+            cursor:pointer;
+            box-shadow:0 2px 4px rgba(0,0,0,0.05);
+            transition: transform .08s, background .12s;
+            font-weight:700;
+        }
+        .num-btn:active { transform:scale(.98); background:#e6eefb; }
+        .btn-action { background:#fefcbf; color:#744210; border-color:#f6e05e; }
+        
+        #options-bar {
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            color: #333;
+            flex-wrap: wrap; 
+            justify-content: center;
+        }
+        #options-bar input {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        #difficulty-controls {
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:10px;
+            margin-top:12px;
+            width:100%;
+            max-width:460px;
+        }
+        .btn-new {
+            padding:12px;
+            font-size:1rem;
+            color:white;
+            border:none;
+            border-radius:8px;
+            cursor:pointer;
+            font-weight:700;
+            box-shadow:0 2px 6px rgba(0,0,0,0.08);
+        }
+        .btn-normal { background:#48bb78; }
+        .btn-hard { background:#ed8936; }
+        .btn-print { background:#3498db; }
+        
+        .info { margin-top:8px; color:#666; font-size:.95rem; max-width:460px; text-align:center; }
+
+    </style>
+</head>
+<body>
+    <h1>Sudoku</h1>
+    <div id="status-bar">Nivel: Normal</div>
+    <div id="sudoku-board" aria-hidden="false"></div>
+
+    <div id="numpad">
+        <button class="num-btn" onclick="inputNumber(1)">1</button>
+        <button class="num-btn" onclick="inputNumber(2)">2</button>
+        <button class="num-btn" onclick="inputNumber(3)">3</button>
+        <button class="num-btn" onclick="inputNumber(4)">4</button>
+        <button class="num-btn" onclick="inputNumber(5)">5</button>
+        <button class="num-btn" onclick="inputNumber(6)">6</button>
+        <button class="num-btn" onclick="inputNumber(7)">7</button>
+        <button class="num-btn" onclick="inputNumber(8)">8</button>
+        <button class="num-btn" onclick="inputNumber(9)">9</button>
+        <button class="num-btn btn-action" onclick="inputNumber(0)">Borrar</button>
+    </div>
+
+    <div id="options-bar">
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="check-toggle" checked onchange="toggleErrorCheck()">
+            <span>Verificar errores al instante</span>
+        </label>
+        <button class="btn-new btn-print" onclick="downloadPDF()">🖨️ Imprimir Puzzle y Solución</button>
+    </div>
+
+    <div id="difficulty-controls">
+        <button class="btn-new btn-normal" onclick="newGame('normal')">Juego Normal (35 pistas)</button>
+        <button class="btn-new btn-hard" onclick="newGame('hard')">Juego Difícil (20–26 pistas)</button>
+    </div>
+    <div class="info">
+        Nota: También puedes usar tu teclado numérico, Backspace para borrar y las flechas para moverte.
+    </div>
+
+<script>
+/* -----------------------------------------
+    Variables del juego
+-----------------------------------------*/
+const SIZE = 9; // Tamaño del tablero
+let solution = new Array(81).fill(0);
+let currentBoard = new Array(81).fill(0);
+let fixedMask = new Array(81).fill(true);
+let selectedCellIndex = -1;
+let checkErrors = true;
+
+/* ------------------------------
+    Inicio automático
+-------------------------------*/
+window.onload = () => {
+    checkErrors = document.getElementById('check-toggle').checked;
+    newGame('normal');
+};
+
+/* ------------------------------
+    Nuevo juego
+-------------------------------*/
+function newGame(difficulty) {
+    if (selectedCellIndex !== -1) {
+        const prev = document.getElementById(`cell-${selectedCellIndex}`);
+        if (prev) prev.classList.remove('selected');
+    }
+    selectedCellIndex = -1; 
+    
+    const status = difficulty === 'normal' ? 'Nivel: Normal (35 pistas)' : 'Nivel: Difícil (20–26 pistas)';
+    document.getElementById('status-bar').textContent = status;
+
+    let clues = (difficulty === 'normal') ? 35 : randomIntBetween(20, 26);
+    const holesToRemove = 81 - clues;
+
+    generateSudokuUnique(holesToRemove);
+    renderBoard();
+}
+
+/* ------------------------------
+    Generador y Lógica de Sudoku
+-------------------------------*/
+function generateSudokuUnique(holesToRemove) {
+    solution = new Array(81).fill(0);
+    fillBoard(solution);
+    currentBoard = [...solution];
+    fixedMask = new Array(81).fill(true);
+
+    const indices = Array.from({length:81}, (_,i) => i);
+    shuffle(indices);
+
+    let removed = 0;
+    for (let idx of indices) {
+        if (removed >= holesToRemove) break;
+        const backup = currentBoard[idx];
+        currentBoard[idx] = 0;
+        fixedMask[idx] = false;
+
+        if (countSolutions(currentBoard, 2) === 1) {
+            removed++;
+        } else {
+            currentBoard[idx] = backup;
+            fixedMask[idx] = true;
+        }
+    }
+}
+
+function fillBoard(grid) {
+    const emptyIdx = grid.indexOf(0);
+    if (emptyIdx === -1) return true;
+    const row = Math.floor(emptyIdx / 9);
+    const col = emptyIdx % 9;
+    const nums = [1,2,3,4,5,6,7,8,9];
+    shuffle(nums);
+
+    for (let n of nums) {
+        if (isValid(grid, row, col, n)) {
+            grid[emptyIdx] = n;
+            if (fillBoard(grid)) return true;
+            grid[emptyIdx] = 0;
+        }
+    }
+    return false;
+}
+
+function isValid(grid, row, col, num) {
+    for (let i=0;i<9;i++) {
+        if (grid[row*9 + i] === num) return false;
+        if (grid[i*9 + col] === num) return false;
+        const boxRow = 3 * Math.floor(row/3) + Math.floor(i/3);
+        const boxCol = 3 * Math.floor(col/3) + (i % 3);
+        if (grid[boxRow*9 + boxCol] === num) return false;
+    }
+    return true;
+}
+
+function countSolutions(board, limit = 2) {
+    const grid = [...board];
+    let solutionsFound = 0;
+    
+    function recurse() {
+        if (solutionsFound >= limit) return;
+        let bestIdx = -1;
+        let bestCandidates = null;
+        for (let i=0;i<81;i++) {
+            if (grid[i] === 0) {
+                const r = Math.floor(i/9), c = i%9;
+                const cand = getCandidates(grid, r, c);
+                if (cand.length === 0) return;
+                if (bestIdx === -1 || cand.length < bestCandidates.length) {
+                    bestIdx = i;
+                    bestCandidates = cand;
+                }
+            }
+        }
+        if (bestIdx === -1) {
+            solutionsFound++;
+            return;
+        }
+        for (let n of bestCandidates) {
+            grid[bestIdx] = n;
+            recurse();
+            grid[bestIdx] = 0;
+            if (solutionsFound >= limit) return;
+        }
+    }
+    recurse();
+    return solutionsFound;
+}
+
+function getCandidates(grid, row, col) {
+    const used = new Array(10).fill(false);
+    for (let i=0;i<9;i++) {
+        const v1 = grid[row*9 + i];
+        if (v1) used[v1] = true;
+        const v2 = grid[i*9 + col];
+        if (v2) used[v2] = true;
+        const v3 = grid[(3 * Math.floor(row/3) + Math.floor(i/3))*9 + (3 * Math.floor(col/3) + (i % 3))];
+        if (v3) used[v3] = true;
+    }
+    const cand = [];
+    for (let n=1;n<=9;n++) if (!used[n]) cand.push(n);
+    return cand;
+}
+/* ------------------------------
+    Fin Lógica Sudoku
+-------------------------------*/
+
+/* ------------------------------
+    Renderizado y Lógica de Interacción
+-------------------------------*/
+function renderBoard() {
+    const boardDiv = document.getElementById('sudoku-board');
+    boardDiv.innerHTML = '';
+    for (let i=0;i<81;i++) {
+        const cell = document.createElement('div');
+        cell.classList.add('cell');
+        const val = currentBoard[i];
+        if (fixedMask[i]) {
+            cell.textContent = val !== 0 ? val : '';
+            cell.classList.add('fixed');
+        } else {
+            cell.textContent = val !== 0 ? val : '';
+            cell.classList.add('editable');
+            cell.onclick = () => selectCell(i);
+            cell.id = `cell-${i}`;
+        }
+        if (i === selectedCellIndex) cell.classList.add('selected');
+        if (checkErrors && !fixedMask[i] && val !== 0 && val !== solution[i]) {
+            cell.classList.add('error');
+        }
+        boardDiv.appendChild(cell);
+    }
+}
+
+function selectCell(index) {
+    if (selectedCellIndex !== -1) {
+        const prev = document.getElementById(`cell-${selectedCellIndex}`);
+        if (prev) prev.classList.remove('selected');
+    }
+    selectedCellIndex = index;
+    
+    if (!fixedMask[index]) {
+        const curr = document.getElementById(`cell-${index}`);
+        if (curr) curr.classList.add('selected');
+    }
+}
+
+function toggleErrorCheck() {
+    const checkbox = document.getElementById('check-toggle');
+    checkErrors = checkbox.checked;
+    renderBoard(); 
+}
+
+function inputNumber(num) {
+    if (selectedCellIndex === -1) return;
+    if (fixedMask[selectedCellIndex]) return;
+
+    const idx = selectedCellIndex;
+    const el = document.getElementById(`cell-${idx}`);
+    if (!el) return;
+
+    if (num === 0) {
+        currentBoard[idx] = 0;
+        el.textContent = '';
+        el.classList.remove('error');
+    } else {
+        currentBoard[idx] = num;
+        el.textContent = num;
+        el.classList.remove('error');
+        if (checkErrors && num !== solution[idx]) {
+            el.classList.add('error');
+        }
+        if (num === solution[idx] && checkWin()) {
+            setTimeout(() => alert('¡Felicidades! ¡Has completado el Sudoku!'), 100);
+        }
+    }
+}
+
+function checkWin() {
+    for (let i=0;i<81;i++) {
+        if (currentBoard[i] !== solution[i]) return false;
+    }
+    return true;
+}
+
+
+/* -----------------------------------------
+    GENERACIÓN DE PDF (ADAPTADO DEL 16x16)
+-----------------------------------------*/
+async function downloadPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    
+    // Configuraciones de dibujo
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const availableWidth = pageWidth - (margin * 2);
+    
+    // Tablero 9x9 (usamos 180mm para un buen tamaño en A4, 180 / 9 = 20mm por celda)
+    const boardWidth = 180;
+    const cellSize = boardWidth / SIZE; // 20mm
+    const startX = (pageWidth - boardWidth) / 2; // Centrar
+    const startY = 40; 
+
+    // --- PÁGINA 1: PUZZLE ---
+    doc.setFontSize(22);
+    doc.text("Sudoku 9x9 - Puzzle", pageWidth / 2, 25, { align: "center" });
+    
+    doc.setFontSize(12);
+    doc.text(`Dificultad: ${document.getElementById('status-bar').textContent}`, pageWidth / 2, 32, { align: "center" });
+
+    // Dibujar Grid Puzzle (Solo pistas fijas)
+    drawSudokuGrid(doc, startX, startY, cellSize, false);
+
+    // --- PÁGINA 2: SOLUCIÓN ---
+    doc.addPage();
+    doc.setFontSize(22);
+    doc.text("Sudoku 9x9 - Solución", pageWidth / 2, 25, { align: "center" });
+    
+    // Dibujar Grid Solución (Todo lleno)
+    drawSudokuGrid(doc, startX, startY, cellSize, true);
+
+    // Guardar archivo
+    doc.save("sudoku-9x9-puzzle-solucion.pdf");
+}
+
+function drawSudokuGrid(doc, startX, startY, cellSize, isSolution) {
+    doc.setDrawColor(0); // Negro
+    doc.setTextColor(50); 
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18); // Tamaño de número dentro del PDF (ajustado para 9x9)
+
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            const x = startX + c * cellSize;
+            const y = startY + r * cellSize;
+            const idx = r * SIZE + c;
+
+            // Determinar qué número mostrar
+            let val = 0;
+            if (isSolution) {
+                val = solution[idx]; // Mostrar todo
+            } else {
+                // Solo mostrar pistas originales para imprimir limpio
+                if (fixedMask[idx]) val = currentBoard[idx];
+            }
+
+            // Fondo gris suave para celdas fijas en el puzzle 
+            if (!isSolution && fixedMask[idx]) {
+                doc.setFillColor(240, 240, 240);
+                doc.rect(x, y, cellSize, cellSize, 'F');
+            }
+            
+            // Si es la página de Puzzle, las celdas a rellenar deben estar en blanco (sin número)
+            if (!isSolution && !fixedMask[idx]) {
+                 // No hacemos nada para que quede blanco
+            } else if (val !== 0) {
+                // Escribir número
+                let numberColor = isSolution ? 0 : (fixedMask[idx] ? 0 : 50); // Negro para Solución/Fijo. Gris/Negro para otros.
+                doc.setTextColor(numberColor);
+                
+                // Centrar texto: + (cellSize/2) para centrar en X, + (cellSize/2) + 3 para ajuste vertical aprox
+                doc.text(String(val), x + cellSize/2, y + cellSize/2 + 3, { align: 'center' }); 
+            }
+        }
+    }
+
+    // Dibujar Líneas
+    // 1. Líneas finas para todas las celdas
+    doc.setLineWidth(0.2); // Más fino
+    for (let i = 0; i <= SIZE; i++) {
+        // Verticales
+        doc.line(startX + i * cellSize, startY, startX + i * cellSize, startY + SIZE * cellSize);
+        // Horizontales
+        doc.line(startX, startY + i * cellSize, startX + SIZE * cellSize, startY + i * cellSize);
+    }
+
+    // 2. Líneas gruesas para los bloques de 3x3 y borde exterior
+    doc.setLineWidth(1.0);
+    for (let i = 0; i <= SIZE; i += 3) { // Cambiamos de 4 a 3
+        // Verticales gruesas
+        doc.line(startX + i * cellSize, startY, startX + i * cellSize, startY + SIZE * cellSize);
+        // Horizontales gruesas
+        doc.line(startX, startY + i * cellSize, startX + SIZE * cellSize, startY + i * cellSize);
+    }
+}
+/* ------------------------------
+    Utilidades
+-------------------------------*/
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+function randomIntBetween(a,b) {
+    return Math.floor(Math.random() * (b - a + 1)) + a;
+}
+
+/* ------------------------------
+    EVENTOS DE TECLADO
+-------------------------------*/
+document.addEventListener('keydown', (e) => {
+    if (selectedCellIndex === -1) return;
+
+    const key = e.key;
+
+    if (key >= '1' && key <= '9') {
+        inputNumber(parseInt(key));
+        return;
+    }
+
+    if (key === 'Backspace' || key === 'Delete' || key === '0') {
+        inputNumber(0);
+        return;
+    }
+
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+        e.preventDefault(); 
+        moveSelection(key);
+    }
+});
+
+function moveSelection(key) {
+    let current = selectedCellIndex;
+    let step = 0;
+    if (key === 'ArrowRight') step = 1;
+    if (key === 'ArrowLeft') step = -1;
+    if (key === 'ArrowDown') step = 9;
+    if (key === 'ArrowUp') step = -9;
+
+    let temp = current + step;
+
+    while (temp >= 0 && temp <= 80) {
+        if (key === 'ArrowRight' && temp % 9 === 0) break;
+        if (key === 'ArrowLeft' && (temp + 1) % 9 === 0) break;
+
+        if (!fixedMask[temp]) {
+            selectCell(temp);
+            return;
+        }
+        temp += step;
+    }
+}
+</script>
+</body>
+</html>
